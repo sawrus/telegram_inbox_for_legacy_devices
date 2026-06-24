@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    {% block refresh %}{% endblock %}
+    <title>{% block title %}Telegram Inbox{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header class="header">
+        <h1>Telegram Inbox</h1>
+        <p>Локальный просмотр входящих сообщений</p>
+    </header>
+    <main class="container">
+        {% if error %}
+            <div class="alert">{{ error }}</div>
+        {% endif %}
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>
