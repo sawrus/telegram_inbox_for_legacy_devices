@@ -17,12 +17,61 @@ body {
     margin: 0;
 }
 .container {
-    max-width: 860px;
+    max-width: 1180px;
     margin: 0 auto;
     padding: 16px;
 }
+.dual-chat {
+    display: -webkit-box;
+    display: -webkit-flex;
+    display: flex;
+    gap: 16px;
+    width: 100%;
+}
+.chat-pane {
+    -webkit-box-flex: 1;
+    -webkit-flex: 1 1 0;
+    flex: 1 1 0;
+    min-width: 0;
+}
+.chat-pane h2 {
+    margin-top: 0;
+}
+.chat-pane h3 {
+    font-size: 18px;
+    margin: 16px 0 8px;
+}
+.chat-divider {
+    background: #222;
+    -webkit-flex: 0 0 8px;
+    flex: 0 0 8px;
+    min-height: 70vh;
+}
+.chat-selector {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    margin: 12px 0;
+    padding: 12px;
+}
+.chat-selector label {
+    display: block;
+    font-weight: 600;
+    margin: 8px 0 4px;
+}
+.chat-selector input,
+.chat-selector select,
+.chat-selector button {
+    box-sizing: border-box;
+    font: inherit;
+    min-height: 40px;
+    width: 100%;
+}
+.chat-selector button {
+    margin-top: 10px;
+}
 .chat-list, .message-list {
-    padding-left: 20px;
+    padding-left: 0;
 }
 .chat-list li, .message {
     background: #fff;
@@ -30,6 +79,16 @@ body {
     border-radius: 6px;
     margin: 8px 0;
     padding: 12px;
+}
+.message-list {
+    list-style-position: inside;
+}
+.message-incoming {
+    background: #fff;
+}
+.message-outgoing {
+    background: #eee;
+    margin-left: 20px;
 }
 a {
     color: #1b5e9e;
@@ -51,4 +110,15 @@ a {
     color: #6b5200;
     margin-bottom: 12px;
     padding: 12px;
+}
+@media (max-width: 760px) {
+    .dual-chat {
+        display: block;
+    }
+    .chat-divider {
+        height: 8px;
+        min-height: 0;
+        margin: 16px 0;
+        width: 100%;
+    }
 }

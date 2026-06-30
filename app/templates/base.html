@@ -10,13 +10,14 @@
 <body>
     <header class="header">
         <h1>Telegram Inbox</h1>
-        <p>Локальный просмотр входящих сообщений</p>
+        <p>Локальный просмотр сообщений Telegram</p>
     </header>
     <main class="container">
         {% if error %}
-            <div class="alert">{{ error }}</div>
+            <div class="alert" role="alert">{{ error }}</div>
         {% endif %}
         {% block content %}{% endblock %}
     </main>
+    {% block scripts %}{% endblock %}
 </body>
 </html>
