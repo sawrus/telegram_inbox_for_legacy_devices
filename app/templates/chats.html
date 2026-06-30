@@ -8,8 +8,7 @@
     <div class="chat-pane-toolbar">
         <form class="chat-selector js-autosubmit" method="get" action="{{ url_for('main.index') }}">
             <input type="hidden" name="{{ other_pane.name }}_chat_id" value="{{ other_pane.selected_chat_id }}">
-            <label class="chat-selector-label" for="{{ pane.name }}_chat_id">Чат</label>
-            <select id="{{ pane.name }}_chat_id" name="{{ pane.name }}_chat_id">
+            <select id="{{ pane.name }}_chat_id" name="{{ pane.name }}_chat_id" class="chat-selector-input" aria-label="Выбор чата">
                 <option value="">Выберите чат</option>
                 {% for chat in pane.chats %}
                     <option value="{{ chat.id }}"{% if chat.id == pane.selected_chat_id %} selected{% endif %}>{{ chat.title }}</option>

@@ -64,23 +64,15 @@ body {
     gap: 10px;
     margin: 0;
 }
-.chat-selector-label {
-    color: #4d5968;
-    font-size: 14px;
-    font-weight: 600;
-    white-space: nowrap;
-}
 .chat-selector select,
 .chat-selector button {
     box-sizing: border-box;
     font: inherit;
     min-height: 40px;
 }
-.chat-selector select {
-    -webkit-box-flex: 1;
-    -webkit-flex: 1 1 auto;
-    flex: 1 1 auto;
-    width: auto;
+.chat-selector-input {
+    width: 100%;
+    max-width: 300px;
 }
 .chat-list, .message-list {
     padding-left: 0;
@@ -167,11 +159,8 @@ a {
     .chat-selector {
         display: block;
     }
-    .chat-selector-label {
-        display: block;
-        margin-bottom: 6px;
-    }
-    .chat-selector select {
+    .chat-selector-input {
         width: 100%;
+        max-width: none;
     }
 }
