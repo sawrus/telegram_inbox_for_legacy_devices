@@ -1,0 +1,40 @@
+[mcp_servers.context7]
+url = "https://mcp.context7.com/mcp"
+tool_timeout_sec = 60
+
+[features]
+memories = true
+
+[mcp_servers.mempalace]
+command = "mempalace-mcp"
+startup_timeout_sec = 30
+
+[mcp_servers.opencode]
+command = "npx"
+args = ["-y", "opencode-docs-mcp"]
+startup_timeout_sec = 60
+
+[mcp_servers.playwright]
+command = "npx"
+args = ["-y", "@playwright/mcp@latest"]
+startup_timeout_sec = 60
+
+[mcp_servers.kubernetes]
+command = "npx"
+args = ["-y", "kubernetes-mcp-server"]
+startup_timeout_sec = 60
+
+[mcp_servers.youtube-transcript]
+command = "npx"
+args = ["-y", "@kimtaeyoon83/mcp-server-youtube-transcript"]
+startup_timeout_sec = 60
+
+[mcp_servers.docker]
+command = "docker"
+args = ["mcp", "gateway", "run"]
+startup_timeout_sec = 30
+
+[mcp_servers.anydb]
+command = "npx"
+args = ["-y", "anydb-mcp"]
+startup_timeout_sec = 60
