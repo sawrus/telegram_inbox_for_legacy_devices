@@ -1,6 +1,8 @@
 import asyncio
 from dataclasses import dataclass
+from datetime import timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from telethon import TelegramClient
 
@@ -25,12 +27,13 @@ class TelegramConfigurationError(RuntimeError):
 
 
 class TelegramService:
-    def __init__(self, api_id, api_hash, session_dir, session_name, message_limit=50):
+    def __init__(self, api_id, api_hash, session_dir, session_name, message_limit=50, message_timezone="Europe/Samara"):
         self.api_id = int(api_id) if api_id else 0
         self.api_hash = api_hash
         self.session_dir = Path(session_dir)
         self.session_name = session_name
         self.message_limit = message_limit
+        self.message_timezone = message_timezone or "Europe/Samara"
 
     @classmethod
     def from_config(cls, config):
@@ -40,6 +43,7 @@ class TelegramService:
             session_dir=config.get("TELEGRAM_SESSION_DIR"),
             session_name=config.get("TELEGRAM_SESSION_NAME"),
             message_limit=config.get("MESSAGE_LIMIT", 50),
+            message_timezone=config.get("MESSAGE_TIMEZONE", "Europe/Samara"),
         )
 
     @property
@@ -55,8 +59,18 @@ class TelegramService:
         return asyncio.run(self._list_chats())
 
     def list_incoming_messages(self, chat_id):
+        return self.list_messages(chat_id)
+
+    def list_messages(self, chat_id):
         self._validate()
-        return asyncio.run(self._list_incoming_messages(chat_id))
+        self.validate_timezone()
+        return asyncio.run(self._list_messages(chat_id))
+
+    def validate_timezone(self):
+        try:
+            ZoneInfo(self.message_timezone)
+        except ZoneInfoNotFoundError as exc:
+            raise TelegramConfigurationError(f"MESSAGE_TIMEZONE is invalid: {self.message_timezone}") from exc
 
     async def _client(self):
         self.session_dir.mkdir(parents=True, exist_ok=True)
@@ -82,7 +96,15 @@ class TelegramService:
             return not bool(message.out)
         return True
 
-    async def _list_incoming_messages(self, chat_id):
+    def _format_message_date(self, message_date):
+        if not message_date:
+            return ""
+        if message_date.tzinfo is None:
+            message_date = message_date.replace(tzinfo=timezone.utc)
+        local_date = message_date.astimezone(ZoneInfo(self.message_timezone))
+        return local_date.strftime("%Y-%m-%d %H:%M:%S")
+
+    async def _list_messages(self, chat_id):
         client = await self._client()
         async with client:
             if not await client.is_user_authorized():
@@ -90,14 +112,13 @@ class TelegramService:
             entity = await client.get_entity(int(chat_id))
             messages = []
             async for message in client.iter_messages(entity, limit=self.message_limit):
-                if not self._is_incoming_message(message):
-                    continue
                 sender = "Unknown"
                 message_sender = getattr(message, "sender", None)
                 if message_sender:
                     sender = getattr(message_sender, "first_name", None) or getattr(message_sender, "title", None) or "Unknown"
                 text = getattr(message, "message", None) or "[media/service message]"
                 message_date = getattr(message, "date", None)
-                date = message_date.strftime("%Y-%m-%d %H:%M:%S") if message_date else ""
-                messages.append(MessageSummary(id=message.id, text=text, sender=sender, date=date, incoming=True))
+                date = self._format_message_date(message_date)
+                incoming = self._is_incoming_message(message)
+                messages.append(MessageSummary(id=message.id, text=text, sender=sender, date=date, incoming=incoming))
             return messages

@@ -3,18 +3,18 @@
 {% block refresh %}<meta http-equiv="refresh" content="{{ refresh_seconds }}">{% endblock %}
 {% block content %}
 <p><a href="{{ url_for('main.index') }}">← К списку чатов</a></p>
-<h2>Входящие сообщения чата {{ chat_id }}</h2>
+<h2>Сообщения чата {{ chat_id }}</h2>
 <p class="refresh-note">Автообновление каждые {{ refresh_seconds }} сек.</p>
 {% if messages %}
 <ol class="message-list">
     {% for message in messages %}
-        <li class="message">
-            <div class="message-meta">{{ message.date }} · {{ message.sender }}</div>
+        <li class="message {% if message.incoming %}message-incoming{% else %}message-outgoing{% endif %}">
+            <div class="message-meta">{{ message.date }} · {% if message.incoming %}{{ message.sender }}{% else %}Моё{% endif %}</div>
             <div class="message-text">{{ message.text }}</div>
         </li>
     {% endfor %}
 </ol>
 {% else %}
-<p class="empty">Входящие сообщения не найдены.</p>
+<p class="empty">Сообщения не найдены.</p>
 {% endif %}
 {% endblock %}
