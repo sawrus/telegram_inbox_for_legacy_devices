@@ -8,10 +8,12 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+    {% block page_header %}
     <header class="header">
         <h1>Telegram Inbox</h1>
         <p>Локальный просмотр сообщений Telegram</p>
     </header>
+    {% endblock %}
     <main class="container">
         {% if error %}
             <div class="alert" role="alert">{{ error }}</div>

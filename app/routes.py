@@ -10,13 +10,6 @@ def _parse_chat_id(value):
         return None
 
 
-def _filter_chats(chats, query):
-    query = (query or "").strip().casefold()
-    if not query:
-        return chats
-    return [chat for chat in chats if query in chat.title.casefold()]
-
-
 def _find_chat(chats, chat_id):
     for chat in chats:
         if chat.id == chat_id:
@@ -24,12 +17,8 @@ def _find_chat(chats, chat_id):
     return None
 
 
-def _build_pane(name, chats, selected_chat_id, query, service):
-    filtered_chats = _filter_chats(chats, query)
+def _build_pane(name, chats, selected_chat_id, service):
     selected_chat = _find_chat(chats, selected_chat_id)
-    choices = list(filtered_chats)
-    if selected_chat and selected_chat not in choices:
-        choices.insert(0, selected_chat)
 
     messages = []
     error = None
@@ -41,11 +30,9 @@ def _build_pane(name, chats, selected_chat_id, query, service):
 
     return {
         "name": name,
-        "query": query,
         "selected_chat": selected_chat,
         "selected_chat_id": selected_chat.id if selected_chat else "",
-        "chats": choices,
-        "has_search_results": bool(filtered_chats),
+        "chats": list(chats),
         "messages": messages,
         "error": error,
     }
@@ -72,26 +59,20 @@ def create_blueprint():
 
         left_chat_id = _parse_chat_id(request.args.get("left_chat_id") or current_app.config.get("LEFT_CHAT_ID"))
         right_chat_id = _parse_chat_id(request.args.get("right_chat_id") or current_app.config.get("RIGHT_CHAT_ID"))
-        left_q = request.args.get("left_q", "").strip()
-        right_q = request.args.get("right_q", "").strip()
 
-        left_pane = _build_pane("left", chats, left_chat_id, left_q, service) if not error else {
+        left_pane = _build_pane("left", chats, left_chat_id, service) if not error else {
             "name": "left",
-            "query": left_q,
             "selected_chat": None,
             "selected_chat_id": "",
             "chats": [],
-            "has_search_results": False,
             "messages": [],
             "error": None,
         }
-        right_pane = _build_pane("right", chats, right_chat_id, right_q, service) if not error else {
+        right_pane = _build_pane("right", chats, right_chat_id, service) if not error else {
             "name": "right",
-            "query": right_q,
             "selected_chat": None,
             "selected_chat_id": "",
             "chats": [],
-            "has_search_results": False,
             "messages": [],
             "error": None,
         }

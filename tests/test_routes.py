@@ -13,9 +13,10 @@ def test_index_renders_two_chat_panes_with_env_defaults(client):
     body = response.get_data(as_text=True)
 
     assert response.status_code == 200
-    assert "Левый чат" in body
-    assert "Правый чат" in body
-    assert "chat-divider" in body
+    assert '<label class="chat-selector-label" for="left_chat_id">Чат</label>' in body
+    assert '<label class="chat-selector-label" for="right_chat_id">Чат</label>' in body
+    assert "chat-divider" not in body
+    assert 'type="search"' not in body
     assert "Жена" in body
     assert "Семейный чат" in body
 
@@ -29,18 +30,12 @@ def test_url_params_override_default_chats(client):
     assert "Привет" in body
 
 
-def test_left_and_right_search_filter_independently(client):
-    response = client.get("/?left_q=жен&right_q=раб")
+def test_index_hides_global_header_on_main_screen(client):
+    response = client.get("/")
     body = response.get_data(as_text=True)
 
     assert response.status_code == 200
-    left_section = body.split("chat-pane-right")[0]
-    right_section = body.split("chat-pane-right")[1]
-
-    assert "Жена" in left_section
-    assert "Работа" not in left_section
-    assert "Работа" in right_section
-    assert "Жена" not in right_section
+    assert '<header class="header">' not in body
 
 
 def test_outgoing_messages_are_visible_and_styled(client):
@@ -52,6 +47,28 @@ def test_outgoing_messages_are_visible_and_styled(client):
     assert "Моё" in body
     assert "message-outgoing" in body
     assert "message-incoming" in body
+
+
+def test_selected_chat_title_is_not_rendered_above_messages(client):
+    response = client.get("/?left_chat_id=1")
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "<h3>" not in body
+    assert "<ol" not in body
+    assert "<ul" in body
+
+
+def test_search_query_params_are_ignored_in_markup(client):
+    response = client.get("/?left_q=жен&right_q=раб")
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert 'name="left_q"' not in body
+    assert 'name="right_q"' not in body
+    assert "Чаты по запросу не найдены." not in body
+    assert "Жена" in body
+    assert "Работа" in body
 
 
 def test_index_includes_legacy_meta_refresh(client):
