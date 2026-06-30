@@ -1,0 +1,121 @@
+---
+name: code-review-workflow
+type: workflow
+trigger: /code-review-workflow
+description: Conduct a structured, constructive code review of a pull or merge request.
+inputs:
+  - pull_request_or_merge_request
+  - codebase_context
+outputs:
+  - review_comments
+  - approval_or_change_requests
+roles:
+  - team-lead
+  - developer
+  - qa
+execution:
+  initiator: developer
+related-rules:
+  - code-style-guide.md
+  - git-workflow-guide.md
+  - sdlc-methodology-guide.md
+uses-skills:
+  - general-dev-tools
+quality-gates:
+  - CI pipeline passes before manual review begins
+  - all blocking comments resolved before approval
+  - no secrets or credentials in diff
+agentic:
+  generated_by: agentic
+  source: "areas/software/general/workflows/code-review-workflow.md"
+  repository: "https://github.com/sawrus/agent-guides"
+  created_by: "v0.4.0"
+  updated_by: "v0.5.1"
+---
+
+## Steps
+
+### 1. Automated Pre-check — `@developer` (author)
+- **Input:** feature branch with changes
+- **Actions:** confirm CI passes (lint / tests / build); no merge conflicts; branch up to date with target
+- **Output:** CI-green PR
+- **Done when:** automated checks pass — only then request review
+
+### 2. Context Understanding — `@team-lead`
+- **Input:** PR description and linked issue/task
+- **Actions:** read PR description and linked ticket; check scope focus; if diff > 400 lines of logic — request splitting the PR
+- **Output:** decision to proceed or split
+- **Done when:** reviewer understands the intent and scope is acceptable
+
+### 3. Code Review — `@team-lead` + `@qa`
+- **Input:** PR diff + context
+- **Actions — Correctness:**
+  - Does the code do what the ticket describes?
+  - Are edge cases and error paths handled?
+- **Actions — Design & Architecture:**
+  - Does the change follow existing codebase patterns?
+  - No unnecessary complexity or over-engineering?
+  - Abstractions at the right level?
+- **Actions — Code Quality:**
+  - Names are clear and intention-revealing?
+  - No duplicated logic that could be extracted?
+  - No magic numbers or strings?
+- **Actions — Tests:**
+  - New behaviors covered by tests?
+  - Tests assert meaningful behavior, not implementation details?
+  - Edge cases tested?
+- **Actions — Security:**
+  - No secrets or credentials committed
+  - User input validated/sanitized
+  - Permissions and access control respected
+- **Output:** review comments with blocking / non-blocking labels; at least one positive comment
+- **Done when:** all review dimensions checked
+
+### 4. Feedback Resolution — `@developer`
+- **Input:** review comments
+- **Actions:** address all blocking comments; push fixes as new commits (no force-push during review); re-request review
+- **Output:** updated PR
+- **Done when:** no open blocking comments
+
+### 5. Approval & Merge — `@team-lead`
+- **Input:** resolved PR
+- **Actions:** re-check fixes; approve; author squashes or rebases per project convention; merge; delete feature branch
+- **Output:** merged PR; branch deleted
+- **Done when:** change merged and feature branch removed
+
+## Agent Interaction Diagram
+
+<!-- agent-diagram:start -->
+```mermaid
+flowchart TD
+  start(["Start /code-review-workflow"])
+  role_1["developer"]
+  role_2["team-lead"]
+  role_3["qa"]
+  step_1["1. Automated Pre-check"]
+  step_2["2. Context Understanding"]
+  step_3["3. Code Review"]
+  step_4["4. Feedback Resolution"]
+  step_5["5. Approval & Merge"]
+  exit(["Approved and merged PR = review complete."])
+  start --> step_1
+  step_1 --> step_2
+  step_2 --> step_3
+  step_3 --> step_4
+  step_4 --> step_5
+  step_5 --> exit
+  role_1 -. owns .-> step_1
+  role_2 -. owns .-> step_2
+  role_2 -. owns .-> step_3
+  role_3 -. owns .-> step_3
+  role_1 -. owns .-> step_4
+  role_2 -. owns .-> step_5
+  step_5 -. iterate if blocked .-> step_1
+```
+<!-- agent-diagram:end -->
+
+## Iteration Loop
+If fixes introduce new issues → reviewer re-raises blocking comments; loop repeats until clean.
+
+## Exit
+Approved and merged PR = review complete.

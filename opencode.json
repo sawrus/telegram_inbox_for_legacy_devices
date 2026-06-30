@@ -1,0 +1,70 @@
+{
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "enabled": true
+    },
+    "mempalace": {
+      "type": "local",
+      "command": [
+        "mempalace-mcp"
+      ]
+    },
+    "opencode": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "opencode-docs-mcp"
+      ],
+      "enabled": true
+    },
+    "playwright": {
+      "type": "local",
+      "command": [
+        "npx",
+        "@playwright/mcp@latest"
+      ],
+      "enabled": true
+    },
+    "kubernetes": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "kubernetes-mcp-server"
+      ],
+      "enabled": true
+    },
+    "youtube-transcript": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@kimtaeyoon83/mcp-server-youtube-transcript"
+      ],
+      "enabled": true
+    },
+    "docker": {
+      "type": "local",
+      "command": [
+        "docker",
+        "mcp",
+        "gateway",
+        "run"
+      ],
+      "enabled": true
+    },
+    "anydb": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "anydb-mcp"
+      ],
+      "enabled": true
+    }
+  },
+  "$schema": "https://opencode.ai/config.json"
+}

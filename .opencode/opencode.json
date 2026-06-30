@@ -1,0 +1,189 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": [
+    "telegram-notification"
+  ],
+  "agent": {
+    "product-owner": {
+      "description": "Main coordinator for feature development workflow",
+      "mode": "primary",
+      "model": "openai/gpt-5.5",
+      "fallback": [
+        "openai/gpt-5.4"
+      ],
+      "permission": {
+        "task": {
+          "pm": "allow",
+          "team-lead": "allow",
+          "designer": "allow",
+          "developer": "allow",
+          "qa": "allow",
+          "instruction_reviewer": "allow",
+          "memory_curator": "allow"
+        }
+      }
+    },
+    "pm": {
+      "description": "Project Manager - coordinates workflow",
+      "mode": "subagent",
+      "model": "openai/gpt-5.4-mini",
+      "fallback": [
+        "openai/gpt-5.4"
+      ],
+      "permission": {
+        "task": {
+          "team-lead": "allow",
+          "designer": "allow",
+          "developer": "allow",
+          "qa": "allow"
+        }
+      }
+    },
+    "team-lead": {
+      "description": "Team Lead - planning and code review",
+      "mode": "all",
+      "model": "openai/gpt-5.5",
+      "fallback": [
+        "openai/gpt-5.4"
+      ],
+      "permission": {
+        "task": {
+          "developer": "allow",
+          "qa": "allow"
+        }
+      }
+    },
+    "developer": {
+      "description": "Developer - implements code",
+      "mode": "all",
+      "model": "openai/gpt-5.4-mini",
+      "fallback": [
+        "openai/gpt-5.4"
+      ]
+    },
+    "devops-engineer": {
+      "description": "DevOps Engineer - infrastructure, CI/CD, and platform reliability",
+      "mode": "all",
+      "model": "openai/gpt-5.4-mini",
+      "fallback": [
+        "openai/gpt-5.4"
+      ]
+    },
+    "instruction_reviewer": {
+      "description": "Instruction Reviewer - post-task review of instruction effectiveness and tool discipline",
+      "mode": "all",
+      "model": "openai/gpt-5-nano",
+      "fallback": [
+        "openai/gpt-5.4-nano"
+      ]
+    },
+    "memory_curator": {
+      "description": "Memory Curator - post-task memory hygiene recommendations without automatic writes",
+      "mode": "all",
+      "model": "openai/gpt-5-nano",
+      "fallback": [
+        "openai/gpt-5.4-nano"
+      ]
+    },
+    "qa": {
+      "description": "QA Engineer - runs tests",
+      "mode": "subagent",
+      "model": "openai/gpt-5.4-nano",
+      "fallback": [
+        "openai/gpt-5.4-mini"
+      ]
+    },
+    "designer": {
+      "description": "Designer - UI/UX validation",
+      "mode": "subagent",
+      "model": "openai/gpt-5.4-nano",
+      "fallback": [
+        "openai/gpt-5.4-mini"
+      ]
+    },
+    "plan": {
+      "description": "Planning mode",
+      "mode": "primary",
+      "model": "openai/gpt-5.5",
+      "fallback": [
+        "openai/gpt-5.4"
+      ]
+    },
+    "build": {
+      "description": "Build mode",
+      "mode": "primary",
+      "model": "openai/gpt-5.4-mini",
+      "fallback": [
+        "openai/gpt-5.4"
+      ]
+    }
+  },
+  "small_model": "openai/gpt-5-nano",
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "enabled": true
+    },
+    "mempalace": {
+      "type": "local",
+      "command": [
+        "mempalace-mcp"
+      ]
+    },
+    "opencode": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "opencode-docs-mcp"
+      ],
+      "enabled": true
+    },
+    "playwright": {
+      "type": "local",
+      "command": [
+        "npx",
+        "@playwright/mcp@latest"
+      ],
+      "enabled": true
+    },
+    "kubernetes": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "kubernetes-mcp-server"
+      ],
+      "enabled": true
+    },
+    "youtube-transcript": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@kimtaeyoon83/mcp-server-youtube-transcript"
+      ],
+      "enabled": true
+    },
+    "docker": {
+      "type": "local",
+      "command": [
+        "docker",
+        "mcp",
+        "gateway",
+        "run"
+      ],
+      "enabled": true
+    },
+    "anydb": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "anydb-mcp"
+      ],
+      "enabled": true
+    }
+  }
+}
