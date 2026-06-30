@@ -124,6 +124,34 @@ a {
     white-space: pre-wrap;
     word-wrap: break-word;
 }
+.message-media {
+    margin-top: 8px;
+}
+.message-photo {
+    display: block;
+    width: auto;
+    max-width: 100%;
+    height: auto;
+    border: 1px solid #d9dde3;
+    border-radius: 8px;
+    background: #f0f2f5;
+}
+.message-media-placeholder {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 8px 10px;
+    border: 1px solid #c8ced8;
+    border-radius: 999px;
+    background: #f7f9fc;
+}
+.message-media-icon {
+    display: inline-block;
+    color: #4b5b72;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
 .message-incoming .message-text {
     font-size: 18px;
     line-height: 1.45;

@@ -28,10 +28,28 @@ class FakeTelegramService:
                 MessageSummary(id=11, text="Я скоро", sender="Me", date="2026-06-24 10:01:00", incoming=False),
             ],
             2: [
-                MessageSummary(id=20, text="Семейный чат", sender="Олег", date="2026-06-24 11:00:00", incoming=True),
+                MessageSummary(
+                    id=20,
+                    text="Семейный чат",
+                    sender="Олег",
+                    date="2026-06-24 11:00:00",
+                    incoming=True,
+                    has_media=True,
+                    media_kind="photo",
+                    media_filename="chat-2-message-20.jpg",
+                ),
             ],
             3: [
-                MessageSummary(id=30, text="Созвон", sender="Анна", date="2026-06-24 12:00:00", incoming=True),
+                MessageSummary(
+                    id=30,
+                    text="Созвон",
+                    sender="Анна",
+                    date="2026-06-24 12:00:00",
+                    incoming=True,
+                    has_media=True,
+                    media_kind="generic",
+                    media_label="Медиа",
+                ),
             ],
         }
         return messages.get(int(chat_id), [])
@@ -49,6 +67,8 @@ class TestConfig:
     TELEGRAM_API_HASH = "hash"
     TELEGRAM_SESSION_NAME = "test"
     TELEGRAM_SESSION_DIR = "/tmp"
+    MEDIA_CACHE_DIR = "/tmp/telegram-inbox-media-tests"
+    MEDIA_CACHE_LIMIT_BYTES = 1024 * 1024 * 1024
 
 
 @pytest.fixture

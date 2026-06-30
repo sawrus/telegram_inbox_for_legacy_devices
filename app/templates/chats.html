@@ -28,7 +28,18 @@
                             <span class="message-author">{% if message.incoming %}{{ message.sender }}{% else %}Моё{% endif %}</span>
                             <span class="message-date">{{ message.date }}</span>
                         </div>
-                        <div class="message-text">{{ message.text }}</div>
+                        {% if message.media_kind == "photo" and message.media_url %}
+                            <div class="message-media">
+                                <img class="message-photo" src="{{ message.media_url }}" alt="{{ message.media_label or 'Фото' }}" loading="lazy">
+                            </div>
+                        {% elif message.media_kind == "generic" %}
+                            <div class="message-media-placeholder" aria-label="{{ message.media_label or 'Медиа' }}">
+                                <span class="message-media-icon">media</span>
+                            </div>
+                        {% endif %}
+                        {% if message.text %}
+                            <div class="message-text">{{ message.text }}</div>
+                        {% endif %}
                     </li>
                 {% endfor %}
             </ul>
