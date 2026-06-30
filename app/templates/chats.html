@@ -1,53 +1,38 @@
 {% extends "base.html" %}
 {% block title %}Два чата - Telegram Inbox{% endblock %}
 {% block refresh %}<meta http-equiv="refresh" content="{{ refresh_seconds }}">{% endblock %}
+{% block page_header %}{% endblock %}
 {% block content %}
-{% macro chat_pane(pane, other_pane, title) %}
+{% macro chat_pane(pane, other_pane) %}
 <section class="chat-pane chat-pane-{{ pane.name }}">
-    <h2>{{ title }}</h2>
-    <p class="refresh-note">Время сообщений: {{ message_timezone }}. Автообновление каждые {{ refresh_seconds }} сек.</p>
-
-    <form class="chat-selector js-autosubmit" method="get" action="{{ url_for('main.index') }}">
-        <input type="hidden" name="{{ other_pane.name }}_chat_id" value="{{ other_pane.selected_chat_id }}">
-        <input type="hidden" name="{{ other_pane.name }}_q" value="{{ other_pane.query }}">
-
-        <label for="{{ pane.name }}_q">Поиск чата</label>
-        <input
-            id="{{ pane.name }}_q"
-            name="{{ pane.name }}_q"
-            type="search"
-            value="{{ pane.query }}"
-            autocomplete="off"
-            placeholder="Введите название"
-        >
-
-        <label for="{{ pane.name }}_chat_id">Чат</label>
-        <select id="{{ pane.name }}_chat_id" name="{{ pane.name }}_chat_id">
-            <option value="">Выберите чат</option>
-            {% for chat in pane.chats %}
-                <option value="{{ chat.id }}"{% if chat.id == pane.selected_chat_id %} selected{% endif %}>{{ chat.title }}</option>
-            {% endfor %}
-        </select>
-        <button type="submit">Найти</button>
-    </form>
-
-    {% if pane.query and not pane.has_search_results %}
-        <p class="empty">Чаты по запросу не найдены.</p>
-    {% endif %}
+    <div class="chat-pane-toolbar">
+        <form class="chat-selector js-autosubmit" method="get" action="{{ url_for('main.index') }}">
+            <input type="hidden" name="{{ other_pane.name }}_chat_id" value="{{ other_pane.selected_chat_id }}">
+            <label class="chat-selector-label" for="{{ pane.name }}_chat_id">Чат</label>
+            <select id="{{ pane.name }}_chat_id" name="{{ pane.name }}_chat_id">
+                <option value="">Выберите чат</option>
+                {% for chat in pane.chats %}
+                    <option value="{{ chat.id }}"{% if chat.id == pane.selected_chat_id %} selected{% endif %}>{{ chat.title }}</option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
 
     {% if pane.error %}
         <div class="alert" role="alert">{{ pane.error }}</div>
     {% elif pane.selected_chat %}
-        <h3>{{ pane.selected_chat.title }}</h3>
         {% if pane.messages %}
-            <ol class="message-list">
+            <ul class="message-list">
                 {% for message in pane.messages %}
                     <li class="message {% if message.incoming %}message-incoming{% else %}message-outgoing{% endif %}">
-                        <div class="message-meta">{{ message.date }} · {% if message.incoming %}{{ message.sender }}{% else %}Моё{% endif %}</div>
+                        <div class="message-meta">
+                            <span class="message-author">{% if message.incoming %}{{ message.sender }}{% else %}Моё{% endif %}</span>
+                            <span class="message-date">{{ message.date }}</span>
+                        </div>
                         <div class="message-text">{{ message.text }}</div>
                     </li>
                 {% endfor %}
-            </ol>
+            </ul>
         {% else %}
             <p class="empty">Сообщения не найдены.</p>
         {% endif %}
@@ -58,9 +43,8 @@
 {% endmacro %}
 
 <div class="dual-chat">
-    {{ chat_pane(left_pane, right_pane, "Левый чат") }}
-    <div class="chat-divider" aria-hidden="true"></div>
-    {{ chat_pane(right_pane, left_pane, "Правый чат") }}
+    {{ chat_pane(left_pane, right_pane) }}
+    {{ chat_pane(right_pane, left_pane) }}
 </div>
 {% endblock %}
 {% block scripts %}
@@ -69,24 +53,7 @@
     var forms = document.querySelectorAll ? document.querySelectorAll(".js-autosubmit") : [];
     for (var i = 0; i < forms.length; i += 1) {
         (function (form) {
-            var timer = null;
-            var inputs = form.getElementsByTagName("input");
             var selects = form.getElementsByTagName("select");
-
-            function submitSoon() {
-                if (timer) {
-                    window.clearTimeout(timer);
-                }
-                timer = window.setTimeout(function () {
-                    form.submit();
-                }, 500);
-            }
-
-            for (var inputIndex = 0; inputIndex < inputs.length; inputIndex += 1) {
-                if (inputs[inputIndex].type === "search") {
-                    inputs[inputIndex].oninput = submitSoon;
-                }
-            }
             for (var selectIndex = 0; selectIndex < selects.length; selectIndex += 1) {
                 selects[selectIndex].onchange = function () {
                     form.submit();
