@@ -18,9 +18,9 @@ sanitizer. Разрешены только необходимые теги и а
 ## Изменения
 
 - `app/config.py`: добавить `MESSAGE_TIMEZONE`, `LEFT_CHAT_ID`, `RIGHT_CHAT_ID`.
-- `app/telegram_client.py`: загружать обе выбранные истории параллельно через одну сессию, сохранять direction,
-  для bot-user получать последнее сообщение через `GetPeerDialogs`, форматировать дату через `zoneinfo` и передавать
-  безопасный HTML в `MessageSummary`.
+- `app/telegram_client.py`: загружать выбранные истории последовательно через одну сессию, сохранять direction,
+  для bot-user получать до `MESSAGE_LIMIT` через `messages.Search` с `GetPeerDialogs` fallback, форматировать дату через
+  `zoneinfo` и передавать безопасный HTML в `MessageSummary`.
 - `app/telegram_html.py`: преобразовывать Telegram entities и санитизировать HTML и URL.
 - `app/routes.py`: рендерить две панели на `/`, сохранить `/chats/<id>` как redirect.
 - `app/templates/chats.html`: добавить два выбора чата, списки сообщений и pane-local empty/error states.

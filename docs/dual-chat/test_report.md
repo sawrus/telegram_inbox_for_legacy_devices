@@ -8,7 +8,7 @@
 - `make lint` — pass, `compileall` completed for app, tests, scripts, and `wsgi.py`.
 - `git diff --check` — pass.
 
-Проверены отдельными regression-тестами: один page-level event loop и Telegram client/auth, параллельность и дедупликация
+Проверены отдельными regression-тестами: один process-level event loop и Telegram client/auth, последовательность и дедупликация
 историй, отмена зависших задач, fallback списка диалогов, pane-local ошибки, UTF-16 offsets Telegram entities, raw HTML и
 небезопасные URL.
 

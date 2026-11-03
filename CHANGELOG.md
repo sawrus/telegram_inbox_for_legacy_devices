@@ -6,10 +6,19 @@
   from turning into `Telegram временно недоступен` after a transient Telegram RPC outage.
 - Added `PINNED_CHATS` so important choices remain in both selectors when full dialog enumeration times out.
 - Set the deployed left default to `@isaev_live_bot` while retaining `Любимая` as a pinned option.
-- Changed the dual-pane loader to use one event loop and one authorized Telethon client per page, with concurrent,
+- Changed the dual-pane loader to use one process-lifetime event loop and authorized Telethon client, with serialized,
   deduplicated selected histories, explicit task cancellation, and dialog-timeout fallback on the same client.
-- Added a targeted `GetPeerDialogs` path for bot-user histories where Telegram leaves `GetHistory` unanswered, so the
-  latest formatted notification remains visible instead of degrading the whole pane.
+- Added a targeted `messages.Search` path for bot-user histories where Telegram leaves `GetHistory` unanswered, returning
+  up to `MESSAGE_LIMIT`; `GetPeerDialogs` remains the one-message emergency fallback.
+- Removed the redundant remote authorization preflight from page loading because it could stall the immediately following
+  bot-history Search; readiness retains the remote authorization check.
+- Serialized selected-pane reads on the shared Telegram session because concurrent bot-history RPCs could time out and
+  degrade the affected pane to the one-message fallback.
+- Reused one process-lifetime Telethon event loop and MTProto connection backed by a disposable authorized session copy,
+  preventing repeated connections from poisoning bot-history Search on later refreshes.
+- Upgraded Telethon from `1.36.0` to `1.45.0` for the current Telegram MTProto layer and request handling.
+- Added a 60-second bot-history Search circuit breaker so 30-second auto-refresh does not continuously reconnect and
+  prolong a transient Telegram-side timeout.
 - Added safe Telegram entity rendering through Telethon's UTF-16-aware HTML formatter and pinned Bleach sanitization;
   raw HTML and unsafe or non-absolute links are never trusted as markup.
 - Bounded Telegram page loading with a shared `TELEGRAM_PAGE_TIMEOUT_SECONDS` deadline (default `10`, valid range `(0, 20]`) and rendered `503` responses during upstream failure.

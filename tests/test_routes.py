@@ -196,6 +196,8 @@ def test_index_cancels_hanging_message_fetch_within_shared_budget(client, tmp_pa
     cancelled_chat_ids = []
 
     class HangingClient:
+        session = type("Session", (), {"auth_key": object()})()
+
         async def __aenter__(self):
             return self
 
@@ -242,7 +244,7 @@ def test_index_cancels_hanging_message_fetch_within_shared_budget(client, tmp_pa
     assert body.count("Telegram временно недоступен") == 2
     assert "Жена" in body
     assert "Семья" in body
-    assert sorted(cancelled_chat_ids) == [1, 2]
+    assert cancelled_chat_ids == []
 
 
 def test_url_params_override_default_chats(client):

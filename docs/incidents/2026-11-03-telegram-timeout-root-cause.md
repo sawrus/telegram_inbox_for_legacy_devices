@@ -23,15 +23,19 @@ Operators could only see that the web process was alive, not whether its upstrea
 
 - Added `TELEGRAM_PAGE_TIMEOUT_SECONDS`, default `10`, with strict validation to `(0, 20]`.
 - Added one page-level `TelegramService.load_page` operation: it creates one event loop, enters one Telethon client, and
-  performs one authorization check for the complete page request.
-- Start both deduplicated selected-history tasks concurrently, then use the reserved remainder of the page deadline for
-  the dialog task. This prevents a slow `get_dialogs()` request from delaying the selected histories on the same client.
+  validates the session auth key locally without an extra network preflight. Remote authorization remains part of
+  `/health/ready`; on this session, calling it immediately before `messages.Search` could leave Search unanswered.
+- Load deduplicated selected histories sequentially, then use the reserved remainder of the page deadline for the dialog
+  task. Concurrent RPCs on this Telegram session could leave bot-history Search unanswered.
+- Open one process-lifetime connection from a disposable copy of the authorized SQLite session and reuse its event loop
+  across HTTP refreshes. Reconnecting with the same auth key made later bot-history Search calls hang.
 - Give full dialog enumeration a separate `TELEGRAM_DIALOG_LIST_TIMEOUT_SECONDS` budget, capped by the remaining page time.
 - When dialog enumeration reaches its short timeout, cancel and await that task, then reuse selected-chat summaries already
   resolved on the same client. All still-pending history tasks are also cancelled and awaited before closing the client.
 - For `Channel` and supergroup entities only, load the newest message with `limit=1`, then query a bounded descending ID
   window, discard missing IDs, preserve newest-first order, and cap the result at `MESSAGE_LIMIT`. Non-bot user chats retain
-  `iter_messages`; bot-user dialogs use `GetPeerDialogs` because their `GetHistory` request may remain unanswered.
+  `iter_messages`; bot-user dialogs use `messages.Search` because their `GetHistory` request may remain unanswered, with
+  `GetPeerDialogs` retained as a one-message emergency fallback.
 - An expected pane failure preserves the sibling pane and selector state, renders a safe pane-local error, and returns HTTP
   `200`; programming errors are not reclassified and continue to propagate.
 - Render a safe `503` page when Telegram is unavailable instead of exposing exception text or allowing an unhandled `500`.
@@ -40,7 +44,7 @@ Operators could only see that the web process was alive, not whether its upstrea
 
 ## Prevention and operational notes
 
-Regression tests cover the single page-level event loop/client/auth flow, concurrent and deduplicated histories, task
+Regression tests cover the single process-level event loop/client/auth flow, serialized and deduplicated histories, task
 cancellation, same-client dialog fallback, pane-local degradation, safe rendered `503` behavior, liveness isolation, and
 bounded readiness. Logs record only the failing route and exception type; upstream messages can contain sensitive account or
 session details and are not logged.

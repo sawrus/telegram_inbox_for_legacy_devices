@@ -1,5 +1,9 @@
 import asyncio
+import atexit
 import itertools
+import shutil
+import tempfile
+import time
 from dataclasses import dataclass, field
 from datetime import timezone
 from pathlib import Path
@@ -19,8 +23,9 @@ CHANNEL_HISTORY_OVERSCAN_MULTIPLIER = 2
 CHANNEL_HISTORY_MAX_CANDIDATE_IDS = 100
 PAGE_CLEANUP_GRACE_SECONDS = 0.1
 USER_HISTORY_PRIMARY_TIMEOUT_SECONDS = 3
-BOT_PEER_REQUEST_TIMEOUT_SECONDS = 2
-BOT_PEER_REQUEST_ATTEMPTS = 2
+BOT_SEARCH_TIMEOUT_SECONDS = 1.5
+BOT_LATEST_TIMEOUT_SECONDS = 1.5
+BOT_SEARCH_COOLDOWN_SECONDS = 60
 
 
 @dataclass
@@ -49,6 +54,7 @@ class SelectedChatLoad:
     summary: ChatSummary | None
     messages: list
     error: Exception | None = None
+    preserve_cached_messages: bool = False
 
 
 @dataclass
@@ -69,6 +75,20 @@ class TelegramUnavailableError(RuntimeError):
 
 class TelegramTimeoutError(TelegramUnavailableError):
     pass
+
+
+class PersistentTelegramClient(TelegramClient):
+    def __init__(self, *args, temporary_session_dir, **kwargs):
+        self._temporary_session_dir = Path(temporary_session_dir)
+        super().__init__(*args, **kwargs)
+
+    async def __aenter__(self):
+        if not self.is_connected():
+            await self.connect()
+        return self
+
+    async def __aexit__(self, exc_type, exc_value, traceback):
+        return None
 
 
 class TelegramService:
@@ -94,6 +114,9 @@ class TelegramService:
         self.media_cache_limit_bytes = int(media_cache_limit_bytes)
         self.page_timeout_seconds = float(page_timeout_seconds)
         self._selected_load_cache = {}
+        self._event_loop = None
+        self._persistent_client = None
+        self._bot_search_retry_at = 0.0
         if not 0 < self.page_timeout_seconds <= 20:
             raise TelegramConfigurationError("TELEGRAM_PAGE_TIMEOUT_SECONDS must be in the range (0, 20]")
 
@@ -115,6 +138,26 @@ class TelegramService:
     def session_path(self):
         return self.session_dir / self.session_name
 
+    @property
+    def session_file_path(self):
+        return Path(f"{self.session_path}.session")
+
+    def _create_runtime_session(self):
+        if not self.session_file_path.is_file():
+            raise TelegramConfigurationError(
+                "Telegram session is not authorized. Run scripts/init_telegram_session.py first."
+            )
+        temporary_session_dir = Path(tempfile.mkdtemp(prefix="telegram-inbox-session-"))
+        temporary_session_path = temporary_session_dir / self.session_name
+        shutil.copy2(self.session_file_path, Path(f"{temporary_session_path}.session"))
+        atexit.register(shutil.rmtree, temporary_session_dir, ignore_errors=True)
+        return temporary_session_path, temporary_session_dir
+
+    def _run_coroutine(self, coroutine, timeout):
+        if self._event_loop is None or self._event_loop.is_closed():
+            self._event_loop = asyncio.new_event_loop()
+        return self._event_loop.run_until_complete(asyncio.wait_for(coroutine, timeout=timeout))
+
     def _validate(self):
         if not self.api_id or not self.api_hash:
             raise TelegramConfigurationError("TELEGRAM_API_ID and TELEGRAM_API_HASH must be configured")
@@ -125,7 +168,7 @@ class TelegramService:
             raise TelegramTimeoutError("Telegram is temporarily unavailable")
         try:
             operation = operation_factory()
-            return asyncio.run(asyncio.wait_for(operation, timeout=min(timeout, self.page_timeout_seconds)))
+            return self._run_coroutine(operation, timeout=min(timeout, self.page_timeout_seconds))
         except TimeoutError as exc:
             raise TelegramTimeoutError("Telegram is temporarily unavailable") from exc
         except (ConnectionError, OperationalError, RPCError) as exc:
@@ -166,7 +209,7 @@ class TelegramService:
         try:
             operation = self._load_page(selected_chat_ids, float(dialog_timeout_seconds), timeout)
             page_timeout = min(timeout, self.page_timeout_seconds)
-            return asyncio.run(asyncio.wait_for(operation, timeout=page_timeout + PAGE_CLEANUP_GRACE_SECONDS))
+            return self._run_coroutine(operation, timeout=page_timeout + PAGE_CLEANUP_GRACE_SECONDS)
         except TimeoutError as exc:
             raise TelegramTimeoutError("Telegram is temporarily unavailable") from exc
         except (ConnectionError, OperationalError, RPCError) as exc:
@@ -292,7 +335,15 @@ class TelegramService:
 
     async def _client(self):
         self.session_dir.mkdir(parents=True, exist_ok=True)
-        return TelegramClient(str(self.session_path), self.api_id, self.api_hash)
+        if self._persistent_client is None:
+            temporary_session_path, temporary_session_dir = self._create_runtime_session()
+            self._persistent_client = PersistentTelegramClient(
+                str(temporary_session_path),
+                self.api_id,
+                self.api_hash,
+                temporary_session_dir=temporary_session_dir,
+            )
+        return self._persistent_client
 
     async def _list_chats(self):
         client = await self._client()
@@ -306,36 +357,51 @@ class TelegramService:
                 chats.append(ChatSummary(id=dialog.id, title=title))
             return chats
 
-    async def _load_selected_chat(self, client, chat_id, peer_resolution_lock=None):
+    async def _fetch_selected_chat(self, client, chat_id):
         summary = None
         try:
-            if peer_resolution_lock is not None:
-                async with peer_resolution_lock:
-                    entity = await client.get_entity(chat_id)
-                    summary = ChatSummary(id=chat_id, title=self._entity_title(entity))
-                    fetched_messages = (
-                        await self._fetch_bot_messages(client, entity)
-                        if getattr(entity, "bot", False)
-                        else None
-                    )
-            else:
+            entity = self._cached_input_entity(client, chat_id)
+            if entity is None:
                 entity = await client.get_entity(chat_id)
-                summary = ChatSummary(id=chat_id, title=self._entity_title(entity))
-                fetched_messages = None
-            if fetched_messages is None:
-                fetched_messages = await self._fetch_messages(client, entity)
-            messages = []
-            for message in fetched_messages:
-                messages.append(await self._build_message_summary(client, entity.id, message))
-            return SelectedChatLoad(summary=summary, messages=messages)
+                title = self._entity_title(entity)
+            else:
+                title = self._cached_entity_title(client, chat_id)
+            summary = ChatSummary(id=chat_id, title=title)
+            fetched_messages = await self._fetch_messages(client, entity)
+            return entity, SelectedChatLoad(
+                summary=summary,
+                messages=list(fetched_messages),
+                preserve_cached_messages=isinstance(entity, types.InputPeerUser) or getattr(entity, "bot", False),
+            )
         except (TelegramUnavailableError, TelegramConfigurationError) as exc:
-            return SelectedChatLoad(summary=summary, messages=[], error=exc)
+            return None, SelectedChatLoad(summary=summary, messages=[], error=exc)
         except TimeoutError:
             error = TelegramTimeoutError("Telegram is temporarily unavailable")
-            return SelectedChatLoad(summary=summary, messages=[], error=error)
+            return None, SelectedChatLoad(summary=summary, messages=[], error=error)
         except (ConnectionError, OperationalError, RPCError):
             error = TelegramUnavailableError("Telegram is temporarily unavailable")
-            return SelectedChatLoad(summary=summary, messages=[], error=error)
+            return None, SelectedChatLoad(summary=summary, messages=[], error=error)
+
+    async def _summarize_selected_chat(self, client, chat_id, load):
+        if load.error is not None:
+            return load
+        try:
+            messages = []
+            for message in load.messages:
+                messages.append(await self._build_message_summary(client, chat_id, message))
+            return SelectedChatLoad(
+                summary=load.summary,
+                messages=messages,
+                preserve_cached_messages=load.preserve_cached_messages,
+            )
+        except (TelegramUnavailableError, TelegramConfigurationError) as exc:
+            return SelectedChatLoad(summary=load.summary, messages=[], error=exc)
+        except TimeoutError:
+            error = TelegramTimeoutError("Telegram is temporarily unavailable")
+            return SelectedChatLoad(summary=load.summary, messages=[], error=error)
+        except (ConnectionError, OperationalError, RPCError):
+            error = TelegramUnavailableError("Telegram is temporarily unavailable")
+            return SelectedChatLoad(summary=load.summary, messages=[], error=error)
 
     @staticmethod
     async def _cancel_tasks(tasks):
@@ -346,24 +412,9 @@ class TelegramService:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def _collect_selected_loads(self, selected_tasks, timeout):
-        if not selected_tasks:
-            return {}
-
-        done, pending = await asyncio.wait(selected_tasks.values(), timeout=max(timeout, 0))
-        await self._cancel_tasks(pending)
-        task_chat_ids = {task: chat_id for chat_id, task in selected_tasks.items()}
-        loads = {}
-        for task in done:
-            loads[task_chat_ids[task]] = task.result()
-        for task in pending:
-            chat_id = task_chat_ids[task]
-            loads[chat_id] = SelectedChatLoad(
-                summary=None,
-                messages=[],
-                error=TelegramTimeoutError("Telegram is temporarily unavailable"),
-            )
-        return loads
+    @staticmethod
+    def _has_local_auth_key(client):
+        return getattr(getattr(client, "session", None), "auth_key", None) is not None
 
     async def _load_page(self, selected_chat_ids, dialog_timeout_seconds, timeout_seconds):
         loop = asyncio.get_running_loop()
@@ -371,28 +422,73 @@ class TelegramService:
         client = await self._client()
         all_tasks = set()
         async with client:
-            if not await client.is_user_authorized():
+            if not self._has_local_auth_key(client):
                 raise TelegramConfigurationError(
                     "Telegram session is not authorized. Run scripts/init_telegram_session.py first."
                 )
 
-            peer_resolution_lock = asyncio.Lock()
-            selected_tasks = {
-                chat_id: asyncio.create_task(self._load_selected_chat(client, chat_id, peer_resolution_lock))
-                for chat_id in selected_chat_ids
-            }
-            all_tasks = set(selected_tasks.values())
             dialogs = None
             try:
                 reserved_dialog_budget = min(dialog_timeout_seconds, timeout_seconds)
-                selected_loads = await self._collect_selected_loads(
-                    selected_tasks,
-                    max(deadline - loop.time() - reserved_dialog_budget, 0),
-                )
+                selected_deadline = deadline - reserved_dialog_budget
+                selected_loads = {}
+                for chat_id in selected_chat_ids:
+                    remaining = max(selected_deadline - loop.time(), 0)
+                    if remaining == 0:
+                        selected_loads[chat_id] = SelectedChatLoad(
+                            summary=None,
+                            messages=[],
+                            error=TelegramTimeoutError("Telegram is temporarily unavailable"),
+                        )
+                        continue
+                    try:
+                        _entity, selected_loads[chat_id] = await asyncio.wait_for(
+                            self._fetch_selected_chat(client, chat_id),
+                            timeout=remaining,
+                        )
+                    except TimeoutError:
+                        selected_loads[chat_id] = SelectedChatLoad(
+                            summary=None,
+                            messages=[],
+                            error=TelegramTimeoutError("Telegram is temporarily unavailable"),
+                        )
+                for chat_id, load in selected_loads.items():
+                    remaining = max(selected_deadline - loop.time(), 0)
+                    if load.error is not None:
+                        continue
+                    if remaining == 0:
+                        selected_loads[chat_id] = SelectedChatLoad(
+                            summary=load.summary,
+                            messages=[],
+                            error=TelegramTimeoutError("Telegram is temporarily unavailable"),
+                        )
+                        continue
+                    try:
+                        selected_loads[chat_id] = await asyncio.wait_for(
+                            self._summarize_selected_chat(client, chat_id, load),
+                            timeout=remaining,
+                        )
+                    except TimeoutError:
+                        selected_loads[chat_id] = SelectedChatLoad(
+                            summary=load.summary,
+                            messages=[],
+                            error=TelegramTimeoutError("Telegram is temporarily unavailable"),
+                        )
                 stale_chat_ids = set()
                 for chat_id, load in selected_loads.items():
                     cached_load = self._selected_load_cache.get(chat_id)
                     if load.error is None and load.summary is not None:
+                        if load.preserve_cached_messages and cached_load is not None:
+                            messages_by_id = {message.id: message for message in cached_load.messages}
+                            messages_by_id.update({message.id: message for message in load.messages})
+                            load = SelectedChatLoad(
+                                summary=load.summary,
+                                messages=sorted(messages_by_id.values(), key=lambda message: message.id, reverse=True)[
+                                    : self.message_limit
+                                ],
+                                preserve_cached_messages=True,
+                            )
+                            selected_loads[chat_id] = load
                         self._selected_load_cache[chat_id] = load
                     elif cached_load is not None:
                         selected_loads[chat_id] = cached_load
@@ -449,6 +545,27 @@ class TelegramService:
         display_name = " ".join(part for part in name_parts if part)
         return display_name or getattr(entity, "username", None) or "Untitled chat"
 
+    @staticmethod
+    def _cached_input_entity(client, chat_id):
+        session = getattr(client, "session", None)
+        get_input_entity = getattr(session, "get_input_entity", None)
+        if not callable(get_input_entity):
+            return None
+        try:
+            return get_input_entity(int(chat_id))
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _cached_entity_title(client, chat_id):
+        execute = getattr(getattr(client, "session", None), "_execute", None)
+        if callable(execute):
+            row = execute("select name, username from entities where id = ?", int(chat_id))
+            if row:
+                name, username = row
+                return name or (f"@{username}" if username else None) or str(chat_id)
+        return str(chat_id)
+
     async def _resolve_chat_summaries(self, chat_ids):
         client = await self._client()
         async with client:
@@ -499,9 +616,9 @@ class TelegramService:
         return messages[: self.message_limit]
 
     async def _fetch_messages(self, client, entity):
-        if isinstance(entity, Channel):
+        if isinstance(entity, (Channel, types.InputPeerChannel)):
             return await self._fetch_channel_messages(client, entity)
-        if getattr(entity, "bot", False):
+        if isinstance(entity, types.InputPeerUser) or getattr(entity, "bot", False):
             return await self._fetch_bot_messages(client, entity)
         try:
             return await asyncio.wait_for(
@@ -515,19 +632,23 @@ class TelegramService:
         return [message async for message in client.iter_messages(entity, limit=self.message_limit)]
 
     async def _fetch_bot_messages(self, client, entity):
-        last_error = None
-        for attempt in range(BOT_PEER_REQUEST_ATTEMPTS):
+        if time.monotonic() >= self._bot_search_retry_at:
             try:
-                return await asyncio.wait_for(
-                    self._fetch_latest_peer_message(client, entity),
-                    timeout=min(BOT_PEER_REQUEST_TIMEOUT_SECONDS, self.page_timeout_seconds),
+                messages = await asyncio.wait_for(
+                    client.get_messages(entity, limit=self.message_limit, search=""),
+                    timeout=min(BOT_SEARCH_TIMEOUT_SECONDS, self.page_timeout_seconds),
                 )
-            except (TimeoutError, ConnectionError, OperationalError, RPCError) as exc:
-                last_error = exc
-                if attempt + 1 < BOT_PEER_REQUEST_ATTEMPTS:
-                    await client.disconnect()
-                    await client.connect()
-        raise last_error
+                if messages:
+                    return list(messages)
+            except (TimeoutError, ConnectionError, OperationalError, RPCError):
+                self._bot_search_retry_at = time.monotonic() + BOT_SEARCH_COOLDOWN_SECONDS
+                await client.disconnect()
+                await client.connect()
+
+        return await asyncio.wait_for(
+            self._fetch_latest_peer_message(client, entity),
+            timeout=min(BOT_LATEST_TIMEOUT_SECONDS, self.page_timeout_seconds),
+        )
 
     @staticmethod
     async def _fetch_latest_peer_message(client, entity):
