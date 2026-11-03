@@ -124,6 +124,17 @@ a {
     white-space: pre-wrap;
     word-wrap: break-word;
 }
+.message-text blockquote,
+.message-text pre {
+    margin: 8px 0;
+    overflow-wrap: anywhere;
+}
+.message-text pre {
+    overflow-x: auto;
+}
+.message-text a {
+    text-decoration: underline;
+}
 .message-media {
     margin-top: 8px;
 }

@@ -1,12 +1,16 @@
 # Test Report: Dual Chat
 
-Дата проверки: 2026-06-30.
+Дата проверки: 2026-11-03.
 
 ## Automated
 
-- `make test` — pass, 12 tests.
+- `make test` — pass, 64 tests.
 - `make lint` — pass, `compileall` completed for app, tests, scripts, and `wsgi.py`.
-- `make build` — pass, Docker image built successfully.
+- `git diff --check` — pass.
+
+Проверены отдельными regression-тестами: один page-level event loop и Telegram client/auth, параллельность и дедупликация
+историй, отмена зависших задач, fallback списка диалогов, pane-local ошибки, UTF-16 offsets Telegram entities, raw HTML и
+небезопасные URL.
 
 ## Manual
 

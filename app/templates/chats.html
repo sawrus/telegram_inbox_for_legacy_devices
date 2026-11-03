@@ -38,7 +38,7 @@
                             </div>
                         {% endif %}
                         {% if message.text %}
-                            <div class="message-text">{{ message.text }}</div>
+                            <div class="message-text">{% if message.safe_html is not none %}{{ message.safe_html }}{% else %}{{ message.text }}{% endif %}</div>
                         {% endif %}
                     </li>
                 {% endfor %}
