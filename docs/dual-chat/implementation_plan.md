@@ -3,16 +3,27 @@
 ## Архитектура
 
 Основной маршрут `/` строит две независимые модели панелей из общего списка Telegram-чатов. Состояние хранится в query
-string: `left_chat_id`, `right_chat_id`, `left_q`, `right_q`. Если chat id не передан в URL, используются env-дефолты
-`LEFT_CHAT_ID` и `RIGHT_CHAT_ID`.
+string: `left_chat_id`, `right_chat_id`. Если chat id не передан в URL, используются env-дефолты `LEFT_CHAT_ID` и
+`RIGHT_CHAT_ID`.
+
+Один вызов `TelegramService.load_page` создаёт один event loop и одну авторизованную Telethon-сессию. Дедуплицированные
+задачи выбранных историй стартуют одновременно и получают приоритет перед полным списком диалогов. Список диалогов имеет отдельный
+короткий timeout; при его истечении задача отменяется и интерфейс использует summaries уже выбранных чатов. Все
+оставшиеся задачи отменяются и дожидаются завершения перед закрытием клиента.
+
+Telegram entities преобразуются в HTML штатным `telethon.extensions.html.unparse`, затем проходят закреплённый Bleach
+sanitizer. Разрешены только необходимые теги и атрибуты, а `href` дополнительно проверяется как абсолютный URL с
+разрешённой схемой. Только результат sanitizer оборачивается в `Markup`.
 
 ## Изменения
 
 - `app/config.py`: добавить `MESSAGE_TIMEZONE`, `LEFT_CHAT_ID`, `RIGHT_CHAT_ID`.
-- `app/telegram_client.py`: заменить входящий-only путь на `list_messages`, сохранять direction, форматировать дату через
-  `zoneinfo`.
+- `app/telegram_client.py`: загружать выбранные истории последовательно через одну сессию, сохранять direction,
+  для bot-user получать до `MESSAGE_LIMIT` через `messages.Search` с `GetPeerDialogs` fallback, форматировать дату через
+  `zoneinfo` и передавать безопасный HTML в `MessageSummary`.
+- `app/telegram_html.py`: преобразовывать Telegram entities и санитизировать HTML и URL.
 - `app/routes.py`: рендерить две панели на `/`, сохранить `/chats/<id>` как redirect.
-- `app/templates/chats.html`: добавить две формы поиска/выбора, списки сообщений и pane-local empty/error states.
+- `app/templates/chats.html`: добавить два выбора чата, списки сообщений и pane-local empty/error states.
 - `app/static/style.css`: добавить flex layout, толстый divider, outgoing message style и narrow-screen fallback.
 
 ## Риски
@@ -20,3 +31,5 @@ string: `left_chat_id`, `right_chat_id`, `left_q`, `right_q`. Если chat id �
 - Неверный timezone может ломать вывод сообщений; конфигурационная ошибка должна быть видимой.
 - Поиск и выбор в одной панели не должны сбрасывать вторую панель.
 - iPad Safari iOS 12 не должен зависеть от современного JS; формы обязаны работать без autosubmit.
+- Ошибка программирования не должна маскироваться как недоступность Telegram.
+- Отмена dialog/history задач должна быть завершена до выхода из общей Telethon-сессии.

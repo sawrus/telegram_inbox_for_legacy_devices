@@ -10,7 +10,7 @@
     {% for message in messages %}
         <li class="message {% if message.incoming %}message-incoming{% else %}message-outgoing{% endif %}">
             <div class="message-meta">{{ message.date }} · {% if message.incoming %}{{ message.sender }}{% else %}Моё{% endif %}</div>
-            <div class="message-text">{{ message.text }}</div>
+            <div class="message-text">{% if message.safe_html is not none %}{{ message.safe_html }}{% else %}{{ message.text }}{% endif %}</div>
         </li>
     {% endfor %}
 </ol>
