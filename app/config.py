@@ -55,6 +55,6 @@ class Config:
     LEFT_CHAT_ID = os.getenv("LEFT_CHAT_ID", "")
     RIGHT_CHAT_ID = os.getenv("RIGHT_CHAT_ID", "")
     PINNED_CHATS = _pinned_chats()
-    REFRESH_SECONDS = int(os.getenv("REFRESH_SECONDS", "30"))
+    REFRESH_SECONDS = int(os.getenv("REFRESH_SECONDS", "60"))
     TELEGRAM_PAGE_TIMEOUT_SECONDS = _telegram_page_timeout_seconds()
     TELEGRAM_DIALOG_LIST_TIMEOUT_SECONDS = _telegram_dialog_list_timeout_seconds()

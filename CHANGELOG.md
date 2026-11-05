@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Changed the default page auto-refresh interval from 30 to 60 seconds and applied it to the deployed service.
 - Preserved the last successful selected-pane results across temporary auto-refresh failures, preventing a working page
   from turning into `Telegram временно недоступен` after a transient Telegram RPC outage.
 - Added `PINNED_CHATS` so important choices remain in both selectors when full dialog enumeration times out.
@@ -17,7 +18,7 @@
 - Reused one process-lifetime Telethon event loop and MTProto connection backed by a disposable authorized session copy,
   preventing repeated connections from poisoning bot-history Search on later refreshes.
 - Upgraded Telethon from `1.36.0` to `1.45.0` for the current Telegram MTProto layer and request handling.
-- Added a 60-second bot-history Search circuit breaker so 30-second auto-refresh does not continuously reconnect and
+- Added a 60-second bot-history Search circuit breaker so periodic auto-refresh does not continuously reconnect and
   prolong a transient Telegram-side timeout.
 - Fixed cached ordinary users being misclassified as bots; personal chats now use normal history loading and replace
   their cached snapshot on refresh instead of entering bot Search cooldown/fallback behavior.

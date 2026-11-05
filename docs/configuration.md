@@ -10,7 +10,7 @@
 | `TELEGRAM_PAGE_TIMEOUT_SECONDS` | Общий deadline загрузки страницы; число из диапазона `(0, 20]` | `10` |
 | `TELEGRAM_DIALOG_LIST_TIMEOUT_SECONDS` | Бюджет полного списка чатов; число из диапазона `(0, 5]` | `3` |
 | `FLASK_SECRET_KEY` | Секрет Flask | `long-random-string` |
-| `REFRESH_SECONDS` | Интервал автообновления | `30` |
+| `REFRESH_SECONDS` | Интервал автообновления | `60` |
 | `MESSAGE_LIMIT` | Лимит последних сообщений | `50` |
 | `MESSAGE_TIMEZONE` | Часовой пояс отображения времени сообщений | `Europe/Samara` |
 | `MEDIA_CACHE_DIR` | Каталог локального кэша фото | `/data/media` |
