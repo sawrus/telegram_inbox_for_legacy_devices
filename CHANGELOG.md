@@ -19,6 +19,12 @@
 - Upgraded Telethon from `1.36.0` to `1.45.0` for the current Telegram MTProto layer and request handling.
 - Added a 60-second bot-history Search circuit breaker so 30-second auto-refresh does not continuously reconnect and
   prolong a transient Telegram-side timeout.
+- Fixed cached ordinary users being misclassified as bots; personal chats now use normal history loading and replace
+  their cached snapshot on refresh instead of entering bot Search cooldown/fallback behavior.
+- Isolated bot-history RPCs on a dedicated persistent Telethon client so bot Search reconnects cannot make ordinary
+  personal-chat panes stale.
+- Opened a clean disposable Telethon client for ordinary histories/dialogs on each page refresh, preventing a poisoned
+  long-lived client from serving stale personal-chat cache indefinitely.
 - Added safe Telegram entity rendering through Telethon's UTF-16-aware HTML formatter and pinned Bleach sanitization;
   raw HTML and unsafe or non-absolute links are never trusted as markup.
 - Bounded Telegram page loading with a shared `TELEGRAM_PAGE_TIMEOUT_SECONDS` deadline (default `10`, valid range `(0, 20]`) and rendered `503` responses during upstream failure.

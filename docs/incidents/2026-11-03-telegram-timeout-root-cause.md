@@ -29,6 +29,12 @@ Operators could only see that the web process was alive, not whether its upstrea
   task. Concurrent RPCs on this Telegram session could leave bot-history Search unanswered.
 - Open one process-lifetime connection from a disposable copy of the authorized SQLite session and reuse its event loop
   across HTTP refreshes. Reconnecting with the same auth key made later bot-history Search calls hang.
+- Classify cached `InputPeerUser` peers using their stored Telegram username instead of treating every user as a bot.
+  Misclassification sent ordinary personal chats through bot Search/cooldown and left their panes on stale cache.
+- Run bot-history requests on a dedicated persistent client so their timeout reconnect path cannot invalidate the
+  connection used by ordinary personal chats and dialog enumeration.
+- Recreate and close the ordinary-history/dialog client for each page refresh. A long-lived primary Telethon client could
+  stay connected while its history RPCs stopped answering, causing every later refresh to reuse stale pane cache.
 - Give full dialog enumeration a separate `TELEGRAM_DIALOG_LIST_TIMEOUT_SECONDS` budget, capped by the remaining page time.
 - When dialog enumeration reaches its short timeout, cancel and await that task, then reuse selected-chat summaries already
   resolved on the same client. All still-pending history tasks are also cancelled and awaited before closing the client.

@@ -127,7 +127,76 @@ def test_runtime_session_copies_authorized_database(tmp_path, monkeypatch):
     assert Path(f"{session_path}.session").read_bytes() == b"authorized-session"
 
 
+def test_bot_history_uses_reused_dedicated_persistent_client(tmp_path, monkeypatch):
+    service = TelegramService("1", "hash", tmp_path, "test", page_timeout_seconds=0.5)
+
+    class PageClientMarker:
+        pass
+
+    page_client = PageClientMarker()
+    bot_client = object()
+    creation_count = 0
+
+    def create_persistent_client():
+        nonlocal creation_count
+        creation_count += 1
+        return bot_client
+
+    monkeypatch.setattr("app.telegram_client.PageTelegramClient", PageClientMarker)
+    service._create_persistent_client = create_persistent_client
+
+    first = asyncio.run(service._bot_history_client(page_client))
+    second = asyncio.run(service._bot_history_client(page_client))
+
+    assert first is bot_client
+    assert second is bot_client
+    assert creation_count == 1
+
+
 def test_page_load_uses_cached_input_user_without_network_entity_lookup(tmp_path):
+    client = PageClient()
+    history_message_id = 10
+
+    class CachedSession:
+        auth_key = object()
+
+        @staticmethod
+        def get_input_entity(chat_id):
+            return types.InputPeerUser(chat_id, 123)
+
+        @staticmethod
+        def _execute(_query, chat_id):
+            return (f"Cached {chat_id}", f"favorite_{chat_id}")
+
+    client.session = CachedSession()
+
+    async def unexpected_get_entity(_chat_id):
+        raise AssertionError("network entity lookup must not run")
+
+    client.get_entity = unexpected_get_entity
+    service = make_service(tmp_path, client)
+
+    async def unexpected_bot_history(_client, _entity):
+        raise AssertionError("ordinary user must not use bot history")
+
+    def iter_messages(_entity, limit):
+        async def messages():
+            yield FakeMessage(history_message_id)
+
+        return messages()
+
+    client.iter_messages = iter_messages
+    service._fetch_bot_messages = unexpected_bot_history
+
+    initial = service.load_page(1, 1, dialog_timeout_seconds=0.1, timeout_seconds=0.5)
+    history_message_id = 20
+    refreshed = service.load_page(1, 1, dialog_timeout_seconds=0.1, timeout_seconds=0.5)
+
+    assert [message.id for message in initial.messages_by_chat_id[1]] == [10]
+    assert [message.id for message in refreshed.messages_by_chat_id[1]] == [20]
+
+
+def test_cached_bot_username_uses_bot_history(tmp_path):
     client = PageClient()
 
     class CachedSession:
@@ -139,14 +208,9 @@ def test_page_load_uses_cached_input_user_without_network_entity_lookup(tmp_path
 
         @staticmethod
         def _execute(_query, chat_id):
-            return (f"Cached {chat_id}", f"bot_{chat_id}")
+            return (f"Bot {chat_id}", f"notifier_{chat_id}_bot")
 
     client.session = CachedSession()
-
-    async def unexpected_get_entity(_chat_id):
-        raise AssertionError("network entity lookup must not run")
-
-    client.get_entity = unexpected_get_entity
     service = make_service(tmp_path, client)
 
     async def fetch_bot_messages(_client, entity):

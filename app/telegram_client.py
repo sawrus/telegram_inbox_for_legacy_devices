@@ -91,6 +91,15 @@ class PersistentTelegramClient(TelegramClient):
         return None
 
 
+class PageTelegramClient(PersistentTelegramClient):
+    async def __aexit__(self, exc_type, exc_value, traceback):
+        try:
+            await self.disconnect()
+        finally:
+            shutil.rmtree(self._temporary_session_dir, ignore_errors=True)
+        return None
+
+
 class TelegramService:
     def __init__(
         self,
@@ -115,7 +124,7 @@ class TelegramService:
         self.page_timeout_seconds = float(page_timeout_seconds)
         self._selected_load_cache = {}
         self._event_loop = None
-        self._persistent_client = None
+        self._persistent_bot_client = None
         self._bot_search_retry_at = 0.0
         if not 0 < self.page_timeout_seconds <= 20:
             raise TelegramConfigurationError("TELEGRAM_PAGE_TIMEOUT_SECONDS must be in the range (0, 20]")
@@ -335,15 +344,29 @@ class TelegramService:
 
     async def _client(self):
         self.session_dir.mkdir(parents=True, exist_ok=True)
-        if self._persistent_client is None:
-            temporary_session_path, temporary_session_dir = self._create_runtime_session()
-            self._persistent_client = PersistentTelegramClient(
-                str(temporary_session_path),
-                self.api_id,
-                self.api_hash,
-                temporary_session_dir=temporary_session_dir,
-            )
-        return self._persistent_client
+        temporary_session_path, temporary_session_dir = self._create_runtime_session()
+        return PageTelegramClient(
+            str(temporary_session_path),
+            self.api_id,
+            self.api_hash,
+            temporary_session_dir=temporary_session_dir,
+        )
+
+    def _create_persistent_client(self):
+        temporary_session_path, temporary_session_dir = self._create_runtime_session()
+        return PersistentTelegramClient(
+            str(temporary_session_path),
+            self.api_id,
+            self.api_hash,
+            temporary_session_dir=temporary_session_dir,
+        )
+
+    async def _bot_history_client(self, page_client):
+        if not isinstance(page_client, PageTelegramClient):
+            return page_client
+        if self._persistent_bot_client is None:
+            self._persistent_bot_client = self._create_persistent_client()
+        return self._persistent_bot_client
 
     async def _list_chats(self):
         client = await self._client()
@@ -364,14 +387,20 @@ class TelegramService:
             if entity is None:
                 entity = await client.get_entity(chat_id)
                 title = self._entity_title(entity)
+                is_bot = bool(getattr(entity, "bot", False))
             else:
-                title = self._cached_entity_title(client, chat_id)
+                title, is_bot = self._cached_entity_metadata(client, chat_id)
             summary = ChatSummary(id=chat_id, title=title)
-            fetched_messages = await self._fetch_messages(client, entity)
-            return entity, SelectedChatLoad(
+            history_client = await self._bot_history_client(client) if is_bot else client
+            if history_client is client:
+                fetched_messages = await self._fetch_messages(history_client, entity, is_bot=is_bot)
+            else:
+                async with history_client:
+                    fetched_messages = await self._fetch_messages(history_client, entity, is_bot=is_bot)
+            return history_client, SelectedChatLoad(
                 summary=summary,
                 messages=list(fetched_messages),
-                preserve_cached_messages=isinstance(entity, types.InputPeerUser) or getattr(entity, "bot", False),
+                preserve_cached_messages=is_bot,
             )
         except (TelegramUnavailableError, TelegramConfigurationError) as exc:
             return None, SelectedChatLoad(summary=summary, messages=[], error=exc)
@@ -432,6 +461,7 @@ class TelegramService:
                 reserved_dialog_budget = min(dialog_timeout_seconds, timeout_seconds)
                 selected_deadline = deadline - reserved_dialog_budget
                 selected_loads = {}
+                selected_message_clients = {}
                 for chat_id in selected_chat_ids:
                     remaining = max(selected_deadline - loop.time(), 0)
                     if remaining == 0:
@@ -442,10 +472,11 @@ class TelegramService:
                         )
                         continue
                     try:
-                        _entity, selected_loads[chat_id] = await asyncio.wait_for(
+                        message_client, selected_loads[chat_id] = await asyncio.wait_for(
                             self._fetch_selected_chat(client, chat_id),
                             timeout=remaining,
                         )
+                        selected_message_clients[chat_id] = message_client
                     except TimeoutError:
                         selected_loads[chat_id] = SelectedChatLoad(
                             summary=None,
@@ -465,7 +496,7 @@ class TelegramService:
                         continue
                     try:
                         selected_loads[chat_id] = await asyncio.wait_for(
-                            self._summarize_selected_chat(client, chat_id, load),
+                            self._summarize_selected_chat(selected_message_clients.get(chat_id, client), chat_id, load),
                             timeout=remaining,
                         )
                     except TimeoutError:
@@ -557,14 +588,16 @@ class TelegramService:
             return None
 
     @staticmethod
-    def _cached_entity_title(client, chat_id):
+    def _cached_entity_metadata(client, chat_id):
         execute = getattr(getattr(client, "session", None), "_execute", None)
         if callable(execute):
             row = execute("select name, username from entities where id = ?", int(chat_id))
             if row:
                 name, username = row
-                return name or (f"@{username}" if username else None) or str(chat_id)
-        return str(chat_id)
+                title = name or (f"@{username}" if username else None) or str(chat_id)
+                is_bot = bool(username and username.casefold().endswith("bot"))
+                return title, is_bot
+        return str(chat_id), False
 
     async def _resolve_chat_summaries(self, chat_ids):
         client = await self._client()
@@ -615,10 +648,12 @@ class TelegramService:
         messages.sort(key=lambda message: message.id, reverse=True)
         return messages[: self.message_limit]
 
-    async def _fetch_messages(self, client, entity):
+    async def _fetch_messages(self, client, entity, is_bot=None):
         if isinstance(entity, (Channel, types.InputPeerChannel)):
             return await self._fetch_channel_messages(client, entity)
-        if isinstance(entity, types.InputPeerUser) or getattr(entity, "bot", False):
+        if is_bot is None:
+            is_bot = bool(getattr(entity, "bot", False))
+        if is_bot:
             return await self._fetch_bot_messages(client, entity)
         try:
             return await asyncio.wait_for(
