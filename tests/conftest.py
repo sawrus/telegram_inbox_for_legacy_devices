@@ -75,6 +75,8 @@ class FakeTelegramService:
 
 class TestConfig:
     TESTING = True
+    INBOX_USERNAME = "test"
+    INBOX_PASSWORD = "test-password"
     SECRET_KEY = "test"
     REFRESH_SECONDS = 7
     MESSAGE_LIMIT = 50
@@ -95,4 +97,6 @@ class TestConfig:
 @pytest.fixture
 def client():
     app = create_app(TestConfig, telegram_service=FakeTelegramService())
-    return app.test_client()
+    client = app.test_client()
+    client.environ_base["HTTP_AUTHORIZATION"] = "Basic dGVzdDp0ZXN0LXBhc3N3b3Jk"
+    return client

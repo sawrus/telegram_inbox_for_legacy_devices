@@ -6,6 +6,7 @@ from telethon import TelegramClient
 
 
 async def main():
+    os.umask(0o077)
     api_id = os.getenv("TELEGRAM_API_ID")
     api_hash = os.getenv("TELEGRAM_API_HASH")
     session_name = os.getenv("TELEGRAM_SESSION_NAME", "telegram-inbox")

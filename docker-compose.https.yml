@@ -1,0 +1,15 @@
+services:
+  https:
+    image: nginx:1.27-alpine
+    ports:
+      - "8443:8443"
+    volumes:
+      - ./deploy/tls/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./data/tls/server.crt:/etc/nginx/tls/server.crt:ro
+      - ./data/tls/server.key:/etc/nginx/tls/server.key:ro
+    depends_on:
+      telegram-inbox:
+        condition: service_healthy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true

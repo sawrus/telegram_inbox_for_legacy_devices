@@ -51,7 +51,7 @@ def test_readiness_returns_safe_503_when_telegram_is_unavailable(client):
 
     app = create_app(type("TestConfig", (), dict(client.application.config)), UnavailableService())
 
-    response = app.test_client().get("/health/ready")
+    response = _authenticated_client(app).get("/health/ready")
 
     assert response.status_code == 503
     assert response.get_json() == {"status": "unavailable"}
@@ -74,7 +74,7 @@ def test_index_keeps_configured_pinned_chat_in_both_selectors(client):
     config["PINNED_CHATS"] = ((1363824162, "Любимая"),)
     app = create_app(type("TestConfig", (), config), client.application.config["TELEGRAM_SERVICE"])
 
-    response = app.test_client().get("/")
+    response = _authenticated_client(app).get("/")
     body = response.get_data(as_text=True)
 
     assert response.status_code == 200
@@ -101,7 +101,7 @@ def test_index_does_not_fall_back_for_non_timeout_dialog_error(client):
     app = create_app(type("TestConfig", (), config), service)
 
     with pytest.raises(RuntimeError, match="unexpected failure detail"):
-        app.test_client().get("/?left_chat_id=1&right_chat_id=2")
+        _authenticated_client(app).get("/?left_chat_id=1&right_chat_id=2")
 
 
 def test_readiness_does_not_hide_programming_error(client):
@@ -113,7 +113,7 @@ def test_readiness_does_not_hide_programming_error(client):
     app = create_app(type("TestConfig", (), config), BrokenService())
 
     with pytest.raises(RuntimeError, match="programming defect"):
-        app.test_client().get("/health/ready")
+        _authenticated_client(app).get("/health/ready")
 
 
 def test_message_loading_does_not_hide_programming_error(client):
@@ -125,7 +125,7 @@ def test_message_loading_does_not_hide_programming_error(client):
     app = create_app(type("TestConfig", (), config), BrokenMessageService())
 
     with pytest.raises(RuntimeError, match="message programming defect"):
-        app.test_client().get("/?left_chat_id=1")
+        _authenticated_client(app).get("/?left_chat_id=1")
 
 
 def test_right_expected_failure_preserves_left_pane_and_returns_200(client):
@@ -143,7 +143,7 @@ def test_right_expected_failure_preserves_left_pane_and_returns_200(client):
     config = dict(client.application.config)
     app = create_app(type("TestConfig", (), config), PartiallyAvailableService())
 
-    response = app.test_client().get("/?left_chat_id=1&right_chat_id=2")
+    response = _authenticated_client(app).get("/?left_chat_id=1&right_chat_id=2")
     body = response.get_data(as_text=True)
 
     assert response.status_code == 200
@@ -167,7 +167,7 @@ def test_dialog_timeout_without_selected_chats_returns_safe_503(client):
     config["RIGHT_CHAT_ID"] = ""
     app = create_app(type("TestConfig", (), config), service)
 
-    response = app.test_client().get("/")
+    response = _authenticated_client(app).get("/")
 
     assert response.status_code == 503
     assert "dialog timeout detail" not in response.get_data(as_text=True)
@@ -181,7 +181,7 @@ def test_index_renders_safe_503_when_telegram_is_unavailable(client):
     service = UnavailableService()
     app = create_app(type("TestConfig", (), dict(client.application.config)), service)
 
-    response = app.test_client().get("/")
+    response = _authenticated_client(app).get("/")
     body = response.get_data(as_text=True)
 
     assert response.status_code == 503
@@ -236,7 +236,7 @@ def test_index_cancels_hanging_message_fetch_within_shared_budget(client, tmp_pa
     app = create_app(type("TestConfig", (), config), service)
     started_at = time.monotonic()
 
-    response = app.test_client().get("/")
+    response = _authenticated_client(app).get("/")
     body = response.get_data(as_text=True)
 
     assert response.status_code == 200
@@ -762,3 +762,9 @@ def test_media_cache_limit_removes_oldest_files(tmp_path):
 
     assert not old_file.exists()
     assert new_file.exists()
+
+
+def _authenticated_client(app):
+    client = app.test_client()
+    client.environ_base["HTTP_AUTHORIZATION"] = "Basic dGVzdDp0ZXN0LXBhc3N3b3Jk"
+    return client

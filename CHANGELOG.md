@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Защищены паролем чаты и фотографии, ограничена частота запросов, добавлены защитные заголовки и необязательный HTTPS.
+- Контейнер запускается без root; перед обновлением необходимо задать учётные данные и перенести права каталога данных по инструкции `docs/security.md`.
+
 - Changed the default page auto-refresh interval from 30 to 60 seconds and applied it to the deployed service.
 - Preserved the last successful selected-pane results across temporary auto-refresh failures, preventing a working page
   from turning into `Telegram временно недоступен` after a transient Telegram RPC outage.

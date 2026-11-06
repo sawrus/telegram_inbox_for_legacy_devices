@@ -1,20 +1,23 @@
 VENV ?= .venv
 PYTHON ?= $(VENV)/bin/python
 
-.PHONY: install dev test lint fmt clean build help
+.PHONY: install dev test lint docs-check fmt clean build help
 
 install: ## Install Python dependencies
 	python3 -m venv $(VENV)
-	$(PYTHON) -m pip install -r requirements.txt
+	$(PYTHON) -m pip install -r requirements-dev.txt
 
 dev: ## Run the Flask app locally
-	$(VENV)/bin/flask --app wsgi:app run --host 0.0.0.0 --port 8080 --debug
+	$(VENV)/bin/flask --app wsgi:app run --host 127.0.0.1 --port 8080 --debug
 
 test: ## Run tests
 	$(PYTHON) -m pytest
 
 lint: ## Run syntax checks
 	$(PYTHON) -m compileall app tests scripts wsgi.py
+
+docs-check: ## Check local documentation links
+	$(PYTHON) scripts/check_docs.py
 
 fmt: ## Formatting is manual for this small project
 	@echo "No formatter is configured."
