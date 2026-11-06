@@ -5,6 +5,8 @@
 | Переменная | Назначение | Пример |
 | --- | --- | --- |
 | `TELEGRAM_API_ID` | API ID из my.telegram.org | `123456` |
+| `INBOX_USERNAME` | Обязательное имя пользователя HTTP Basic, без двоеточия | `inbox` |
+| `INBOX_PASSWORD` | Обязательный длинный случайный пароль HTTP Basic | задаётся локально |
 | `TELEGRAM_API_HASH` | API hash из my.telegram.org | `abcdef...` |
 | `TELEGRAM_SESSION_NAME` | Имя session-файла | `telegram-inbox` |
 | `TELEGRAM_PAGE_TIMEOUT_SECONDS` | Общий deadline загрузки страницы; число из диапазона `(0, 20]` | `10` |

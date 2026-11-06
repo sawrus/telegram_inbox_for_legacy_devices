@@ -43,6 +43,8 @@ def _pinned_chats():
 
 
 class Config:
+    INBOX_USERNAME = os.getenv("INBOX_USERNAME", "")
+    INBOX_PASSWORD = os.getenv("INBOX_PASSWORD", "")
     SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "change-me-local-only")
     TELEGRAM_API_ID = os.getenv("TELEGRAM_API_ID", "")
     TELEGRAM_API_HASH = os.getenv("TELEGRAM_API_HASH", "")
