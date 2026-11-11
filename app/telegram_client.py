@@ -1,6 +1,7 @@
 import asyncio
 import atexit
 import itertools
+import logging
 import shutil
 import tempfile
 import time
@@ -26,6 +27,9 @@ USER_HISTORY_PRIMARY_TIMEOUT_SECONDS = 3
 BOT_SEARCH_TIMEOUT_SECONDS = 1.5
 BOT_LATEST_TIMEOUT_SECONDS = 1.5
 BOT_SEARCH_COOLDOWN_SECONDS = 60
+BOT_RECONNECT_TIMEOUT_SECONDS = 1.5
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -382,6 +386,7 @@ class TelegramService:
 
     async def _fetch_selected_chat(self, client, chat_id):
         summary = None
+        started = time.monotonic()
         try:
             entity = self._cached_input_entity(client, chat_id)
             if entity is None:
@@ -403,11 +408,14 @@ class TelegramService:
                 preserve_cached_messages=is_bot,
             )
         except (TelegramUnavailableError, TelegramConfigurationError) as exc:
+            logger.warning("telegram_history_failed chat_id=%s error_type=%s elapsed_ms=%d", chat_id, type(exc).__name__, (time.monotonic() - started) * 1000)
             return None, SelectedChatLoad(summary=summary, messages=[], error=exc)
         except TimeoutError:
+            logger.warning("telegram_history_failed chat_id=%s error_type=TimeoutError elapsed_ms=%d", chat_id, (time.monotonic() - started) * 1000)
             error = TelegramTimeoutError("Telegram is temporarily unavailable")
             return None, SelectedChatLoad(summary=summary, messages=[], error=error)
-        except (ConnectionError, OperationalError, RPCError):
+        except (ConnectionError, OperationalError, RPCError) as exc:
+            logger.warning("telegram_history_failed chat_id=%s error_type=%s elapsed_ms=%d", chat_id, type(exc).__name__, (time.monotonic() - started) * 1000)
             error = TelegramUnavailableError("Telegram is temporarily unavailable")
             return None, SelectedChatLoad(summary=summary, messages=[], error=error)
 
@@ -478,6 +486,7 @@ class TelegramService:
                         )
                         selected_message_clients[chat_id] = message_client
                     except TimeoutError:
+                        logger.warning("telegram_history_failed chat_id=%s stage=page_budget error_type=TimeoutError", chat_id)
                         selected_loads[chat_id] = SelectedChatLoad(
                             summary=None,
                             messages=[],
@@ -500,6 +509,7 @@ class TelegramService:
                             timeout=remaining,
                         )
                     except TimeoutError:
+                        logger.warning("telegram_history_failed chat_id=%s stage=summary error_type=TimeoutError", chat_id)
                         selected_loads[chat_id] = SelectedChatLoad(
                             summary=load.summary,
                             messages=[],
@@ -531,8 +541,10 @@ class TelegramService:
                 try:
                     dialogs = await asyncio.wait_for(asyncio.shield(dialog_task), timeout=dialog_budget)
                 except TimeoutError:
+                    logger.warning("telegram_dialogs_failed stage=list error_type=TimeoutError")
                     await self._cancel_tasks([dialog_task])
-                except (ConnectionError, OperationalError, RPCError):
+                except (ConnectionError, OperationalError, RPCError) as exc:
+                    logger.warning("telegram_dialogs_failed stage=list error_type=%s", type(exc).__name__)
                     await self._cancel_tasks([dialog_task])
                 if dialogs is None and not selected_chat_ids:
                     raise TelegramTimeoutError("Telegram is temporarily unavailable")
@@ -667,6 +679,7 @@ class TelegramService:
         return [message async for message in client.iter_messages(entity, limit=self.message_limit)]
 
     async def _fetch_bot_messages(self, client, entity):
+        chat_id = utils.get_peer_id(entity) if isinstance(entity, (types.InputPeerUser, types.User)) else getattr(entity, "id", None)
         if time.monotonic() >= self._bot_search_retry_at:
             try:
                 messages = await asyncio.wait_for(
@@ -675,15 +688,37 @@ class TelegramService:
                 )
                 if messages:
                     return list(messages)
-            except (TimeoutError, ConnectionError, OperationalError, RPCError):
+            except (TimeoutError, ConnectionError, OperationalError, RPCError) as exc:
+                logger.warning("telegram_bot_failure chat_id=%s stage=search error_type=%s", chat_id, type(exc).__name__)
                 self._bot_search_retry_at = time.monotonic() + BOT_SEARCH_COOLDOWN_SECONDS
-                await client.disconnect()
-                await client.connect()
+                try:
+                    async def reconnect():
+                        await client.disconnect()
+                        await client.connect()
 
-        return await asyncio.wait_for(
-            self._fetch_latest_peer_message(client, entity),
-            timeout=min(BOT_LATEST_TIMEOUT_SECONDS, self.page_timeout_seconds),
-        )
+                    await asyncio.wait_for(reconnect(), timeout=min(BOT_RECONNECT_TIMEOUT_SECONDS, self.page_timeout_seconds))
+                except (TimeoutError, ConnectionError, OperationalError, RPCError) as reconnect_error:
+                    logger.warning("telegram_bot_failure chat_id=%s stage=bot_reconnect error_type=%s", chat_id, type(reconnect_error).__name__)
+                    if client is self._persistent_bot_client:
+                        self._persistent_bot_client = None
+                    raise
+
+        try:
+            messages = await asyncio.wait_for(
+                self._fetch_latest_peer_message(client, entity),
+                timeout=min(BOT_LATEST_TIMEOUT_SECONDS, self.page_timeout_seconds),
+            )
+            logger.warning("telegram_bot_fallback chat_id=%s message_count=%d", chat_id, len(messages))
+            return messages
+        except (TimeoutError, ConnectionError, OperationalError, RPCError) as exc:
+            logger.warning("telegram_bot_failure chat_id=%s stage=latest_fallback error_type=%s", chat_id, type(exc).__name__)
+            if client is self._persistent_bot_client:
+                self._persistent_bot_client = None
+                try:
+                    await asyncio.wait_for(client.disconnect(), timeout=min(BOT_RECONNECT_TIMEOUT_SECONDS, self.page_timeout_seconds))
+                except (TimeoutError, ConnectionError, OperationalError, RPCError):
+                    logger.warning("telegram_bot_failure chat_id=%s stage=disconnect error_type=cleanup_failed", chat_id)
+            raise
 
     @staticmethod
     async def _fetch_latest_peer_message(client, entity):

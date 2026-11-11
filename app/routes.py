@@ -44,13 +44,14 @@ def _build_loaded_pane(name, chats, selected_chat_id, page_result):
     error = None
     if selected_chat_id in page_result.errors_by_chat_id:
         current_app.logger.warning(
-            "telegram_pane_failed path=/ pane=%s error_type=%s",
+            "telegram_pane_failed path=/ pane=%s chat_id=%s error_type=%s",
             name,
+            selected_chat_id,
             type(page_result.errors_by_chat_id[selected_chat_id]).__name__,
         )
         error = TELEGRAM_UNAVAILABLE_MESSAGE
     if selected_chat_id in page_result.stale_chat_ids:
-        current_app.logger.warning("telegram_pane_stale path=/ pane=%s", name)
+        current_app.logger.warning("telegram_pane_stale path=/ pane=%s chat_id=%s", name, selected_chat_id)
     return {
         "name": name,
         "selected_chat": selected_chat,

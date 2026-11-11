@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added safe Telegram failure stage, chat ID and fallback diagnostics; bounded bot reconnects and recreate a failed bot client on the next refresh.
+
 - Защищены паролем чаты и фотографии, ограничена частота запросов, добавлены защитные заголовки и необязательный HTTPS.
 - Контейнер запускается без root; перед обновлением необходимо задать учётные данные и перенести права каталога данных по инструкции `docs/security.md`.
 

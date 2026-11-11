@@ -469,6 +469,23 @@ def test_bot_history_reconnects_and_uses_latest_fallback_after_search_timeout(tm
     assert client.connect_count == 1
 
 
+def test_bot_reconnect_timeout_is_bounded_and_logged(tmp_path, caplog):
+    service = make_service(tmp_path, PageClient())
+    entity = SimpleNamespace(id=1, bot=True)
+
+    class StalledReconnectClient:
+        async def get_messages(self, *_args, **_kwargs):
+            raise TimeoutError("sensitive upstream detail")
+
+        async def disconnect(self):
+            await asyncio.sleep(10)
+
+    with pytest.raises(TimeoutError):
+        asyncio.run(service._fetch_bot_messages(StalledReconnectClient(), entity))
+    assert "stage=bot_reconnect" in caplog.text
+    assert "sensitive upstream detail" not in caplog.text
+
+
 def test_bot_history_skips_search_during_cooldown(tmp_path):
     service = make_service(tmp_path, PageClient())
     service._bot_search_retry_at = float("inf")
